@@ -93,6 +93,7 @@ class Simulation:
 
         """
         sim_spectra = self.core_spectra
+        print(sim_spectra[0].filepath)
 
         shifted_auger_spectra = self._position_augers_randomly(
             self.output_spectrum.x, self.auger_spectra
@@ -100,6 +101,8 @@ class Simulation:
         sim_spectra.extend(shifted_auger_spectra)
 
         # Make sure that the right amount of params is given.
+        # print(len(sim_spectra))
+        # print(len(scaling_params))
         if len(sim_spectra) < len(scaling_params):
             print("Please supply the correct amount of scaling parameters.")
             print("Simulated spectrum was not changed!")
