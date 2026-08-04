@@ -91,6 +91,7 @@ class Creator:
         # if available.
         if params is not None:
             for key in params.keys():
+                # print(key)
                 if key != "sim_ranges":
                     self.params[key] = params[key]
                 else:
@@ -106,6 +107,17 @@ class Creator:
 
         self.labels = self.params["labels"]
         self.spectra = self.params["spectra"]
+
+
+        # start my code
+        # print("my code 1")
+        self.new_method = False
+        if ("new_labels" in self.params) and ("concentrations" in self.params):
+            # print("in if statement")
+            self.new_labels = self.params["new_labels"]
+            self.concentrations = self.params["concentrations"]
+            self.new_method = True
+        # end my code
 
         # Warning if core and auger spectra of same species are
         # not scaled together.
@@ -126,16 +138,32 @@ class Creator:
         no_of_params = 1 + self.no_of_linear_params + 6
 
         self.simulation_matrix = np.zeros((self.no_of_simulations, no_of_params))
+        # print(np.shape(self.simulation_matrix))
 
         # Create the parameter matrix for the simulation.
+        
         self.create_matrix(
             single=self.params["single"],
             variable_no_of_inputs=self.params["variable_no_of_inputs"],
             always_auger=self.params["always_auger"],
             always_core=self.params["always_core"],
         )
+        """
+        self.create_matrix_real(
+            single=self.params["single"],
+            variable_no_of_inputs=self.params["variable_no_of_inputs"],
+            always_auger=self.params["always_auger"],
+            always_core=self.params["always_core"],
+        )
+        """
+        
+        
+        
+        
+        # print(self.simulation_matrix)
 
         self.df = pd.DataFrame()
+        # print(self.df)
 
     def load_input_spectra(self, filenames):
         """
@@ -157,6 +185,7 @@ class Creator:
 
         """
         input_spectra = pd.DataFrame(columns=self.spectra)
+        print(self.spectra)
 
         input_datapath = os.path.join(
             *[
@@ -178,10 +207,29 @@ class Creator:
                 ref_spectra_dict[label] = measured_spectrum
             input_spectra_list.append(ref_spectra_dict)
 
+        
         return pd.concat(
             [input_spectra, pd.DataFrame(input_spectra_list)],
             join="outer",
         )
+    
+    def create_matrix_real(
+        self,
+        single=True,
+        variable_no_of_inputs=True,
+        always_auger=False,
+        always_core=True,
+    ):
+        key = self.select_reference_set()
+        n = self.no_of_simulations
+        keys = np.full((n, 1), key)
+        id = np.identity(n)
+        final = np.hstack((keys, id))
+        row = np.array([[0, 0, 0, np.nan, 0, 0]])
+        rows = np.repeat(row, n, axis=0)
+        final = np.hstack((final, rows))
+        self.simulation_matrix = final
+
 
     def create_matrix(
         self,
@@ -230,6 +278,7 @@ class Creator:
         """
         for i in range(self.no_of_simulations):
             key = self.select_reference_set()  # select a set of references
+            # print(key)
             self.simulation_matrix[i, 0] = int(key)
 
             self.simulation_matrix[i, 1 : self.no_of_linear_params + 1] = (
@@ -245,6 +294,8 @@ class Creator:
             self.simulation_matrix[i, self.no_of_linear_params + 1 :] = (
                 self.select_sim_params(key)
             )
+
+            # print(self.simulation_matrix)
 
             print(
                 "Random parameters: " + str(i + 1) + "/" + str(self.no_of_simulations)
@@ -327,8 +378,10 @@ class Creator:
         for spec in inputs.iloc[0]:
             if str(spec) != "nan":
                 if spec.spectrum_type == "auger":
+                    # print("a!")
                     auger_spectra.append(spec)
                 if spec.spectrum_type == "core_level":
+                    # print("c!")
                     core_spectra.append(spec)
         auger_region = self._select_one_auger_region(auger_spectra)
 
@@ -387,6 +440,7 @@ class Creator:
                     params = self._normalize_float_list(r)
 
             # Randomly shuffle so that zeros are equally distributed.
+            # print(params)
             np.random.shuffle(params)
             # Add linear params at the positions where there
             # are reference spectra available
@@ -685,6 +739,10 @@ class Creator:
             pressure = self.simulation_matrix[i][-2]
             distance = self.simulation_matrix[i][-1]
 
+            # my note: add code here to convert scaling params to actual concentrations?
+            # will need to modify json file, add section with concentrations???
+            # data structure to store it in Creator/MeasuredSpectrum classes?
+
             try:
                 # In order to assign a label, the scatterers are encoded
                 # by numbers.
@@ -703,11 +761,13 @@ class Creator:
                 },
             )
 
+            # my note (IMP): check if this makes any changes to sim.output_spectrum.label.items()
             if self.params["normalize_outputs"]:
                 sim.output_spectrum.normalize()
 
             dict_1 = {"reference_set": ref_set_key}
             dict_2 = self._dict_from_one_simulation(sim)
+            # print(dict_2)
             new_dict = {**dict_1, **dict_2}
             dict_list.append(new_dict)
             print("Simulation: " + str(i + 1) + "/" + str(self.no_of_simulations))
@@ -715,6 +775,13 @@ class Creator:
         print("Number of created spectra: " + str(self.no_of_simulations))
 
         self.df = pd.DataFrame(dict_list)
+
+        ## start my code
+        # with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.max_colwidth', None):
+        # #     print(self.df)
+        # # print(self.df)
+        #     print(self.df['label'])
+        # end my code
 
         if self.params["ensure_same_length"]:
             self.df = self._extend_spectra_in_df(self.df)
@@ -738,6 +805,8 @@ class Creator:
             Dictionaty containing all simulation data.
 
         """
+
+        # IMP: my note: this section is important!!!!
         spectrum = sim.output_spectrum
 
         # Add all percentages of one species together.
@@ -766,9 +835,38 @@ class Creator:
             "x": spectrum.x,
             "y": y,
         }
+
+        # print(self.labels)
+        # print(spectrum.label)
+
         for label_value in self.labels:
             if label_value not in sim_dict["label"].keys():
                 sim_dict["label"][label_value] = 0.0
+
+        # my note: i think i can add the changing labels part here????
+        # start my code: lowkey don't need to make diff variables, will mod later probably
+        # print("my code 2")
+        if self.new_method: # is this correct syntax????
+            # print("if 2")
+            mod_labels = {}
+            mod_arr = np.zeros(len(self.new_labels)) # idk
+            # print(self.concentrations)
+            lab = sim_dict["label"]
+            for key, value in self.concentrations.items():
+                # coeff = spectrum.label[key]
+                coeff = lab[key]
+                arr = coeff * (np.array(value))
+                # print(arr)
+                mod_arr = np.add(mod_arr, arr)
+
+            for i in range(len(self.new_labels)):
+                l = self.new_labels[i]
+                mod_labels[l] = mod_arr[i]
+            print(mod_labels)
+            spectrum.label = mod_labels
+            sim_dict["label"] = mod_labels
+            # print("done if 2")
+        # end my code
 
         return sim_dict
 
@@ -982,6 +1080,15 @@ class FileWriter:
         self.params = params
         self.name = self.params["name"]
         self.labels = self.params["labels"]
+
+        ## start my code
+        self.new_method = False
+        if ("new_labels" in self.params) and ("concentrations" in self.params):
+            # print("in if statement")
+            self.labels = self.params["new_labels"]
+            self.concentrations = self.params["concentrations"]
+            self.new_method = True
+        # end my code
 
         self.main_dir = str
         self.excel_filepath = str
@@ -1208,6 +1315,12 @@ class FileWriter:
         """
         new_labels = np.zeros((len(y), len(self.labels)))
 
+        # if ("new_labels" in self.params) and ("concentrations" in self.params):
+        #     for i, label_dict in enumerate(y):
+        #         for species, value in label_dict.items():
+        #             number = self.new_labels.index(species)
+        #             new_labels[i, number] = value
+        # else:
         for i, label_dict in enumerate(y):
             for species, value in label_dict.items():
                 number = self.labels.index(species)
